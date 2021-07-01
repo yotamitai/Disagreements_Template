@@ -1,13 +1,9 @@
-import logging
-from copy import copy
-from os.path import join
-import gym
 import imageio
 import numpy as np
 import matplotlib.pyplot as plt
+from os.path import join
 from scipy.special import softmax
-
-from disagreements.logging import log
+from disagreements.logging_info import log
 from get_trajectories import trajectory_importance_max_min
 from utils import save_image, create_video, make_clean_dirs, mark_agent
 
@@ -74,7 +70,7 @@ class DisagreementTrace(object):
         a2_frames = [self.a2_trajectories[s2_traj][x - min(s2_indexes)].image for x in s2_indexes]
         assert len(a1_frames) == self.trajectory_length, 'Error in highlight frame length'
         assert len(a2_frames) == self.trajectory_length, 'Error in highlight frame length'
-        da_index = self.trajectory_length//2 -1
+        da_index = self.trajectory_length // 2 - 1
         if mark_position:
             a1_frames[da_index] = mark_agent(a1_frames[da_index], position=mark_position)
             a2_frames[da_index] = a1_frames[da_index]
@@ -249,7 +245,7 @@ def disagreement_states(trace, env, agent, timestep, curr_s):
     if start < 0: start = 0
     da_states = trace.states[start:]
     done = False
-    next_timestep = timestep+1
+    next_timestep = timestep + 1
     for step in range(next_timestep, next_timestep + (horizon // 2)):
         if done: break
         a = agent.act(curr_s)
@@ -305,7 +301,7 @@ def get_top_k_disagreements(traces, args):
             """"""
             while len(d.a1_states) < args.horizon:
                 last_idx = d.a1_states[-1]
-                if last_idx < len(traces[d.episode].states)-1:
+                if last_idx < len(traces[d.episode].states) - 1:
                     last_idx += 1
                     d.a1_states.append(last_idx)
                 else:

@@ -1,8 +1,5 @@
 import argparse
-import gym
-import numpy as np
-
-from disagreements.logging import log
+from disagreements.logging_info import log
 from get_agent import get_agent
 
 def agent_assessment(a1_config, a2_config):

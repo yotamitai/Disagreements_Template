@@ -1,15 +1,12 @@
 import glob
 import json
-import logging
 import os
+from os.path import join
 import shutil
 import pickle
-from datetime import datetime
-from os.path import join, abspath, basename
 import cv2
-
-from skimage import img_as_ubyte
 import imageio
+from skimage import img_as_ubyte
 
 
 def load_traces(path):
@@ -85,7 +82,7 @@ def mark_agent(img, position=None, color=255, thickness=2):
     return img2
 
 
-def add_border(image_src, border_thickness=5, color=[0,0,0]):
+def add_border(image_src, border_thickness=5, color=[0, 0, 0]):
     bt = border_thickness
     x = cv2.copyMakeBorder(image_src, bt, bt, bt, bt, cv2.BORDER_CONSTANT, value=color)
     cv2.imshow("Image", x)

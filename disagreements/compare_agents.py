@@ -1,16 +1,14 @@
 import argparse
 import random
-import os
 from os.path import abspath
-import gym
 from os.path import join
-from agent_score import assess_agents, agent_assessment
+from agent_score import agent_assessment
 from disagreement import save_disagreements, get_top_k_disagreements, disagreement, \
     DisagreementTrace, State
-from disagreements.logging import log, get_logging
+from disagreements.logging_info import log, get_logging
 from get_agent import get_agent
 from side_by_side import side_by_side_video
-from utils import mark_agent, pickle_load, pickle_save, make_clean_dirs, load_traces, save_traces
+from utils import load_traces, save_traces
 from copy import deepcopy
 
 
@@ -81,7 +79,7 @@ def online_comparison(args):
 
 
 def rank_trajectories(traces, importance_type, state_importance, traj_importance):
-    #TODO check that trajectories are being summed correctly (different lengths)
+    # TODO check that trajectories are being summed correctly (different lengths)
     # check that
     for trace in traces:
         for i, trajectory in enumerate(trace.disagreement_trajectories):
@@ -119,7 +117,8 @@ def main(args):
     a1_disagreement_frames, a2_disagreement_frames = [], []
     for d in disagreements:
         a1_frames, a2_frames = traces[d.episode].get_frames(d.a1_states, d.a2_states,
-                                                    d.trajectory_index, mark_position=[164,66])
+                                                            d.trajectory_index,
+                                                            mark_position=[164, 66])
         a1_disagreement_frames.append(a1_frames)
         a2_disagreement_frames.append(a2_frames)
 
