@@ -15,18 +15,18 @@ from copy import deepcopy
 def online_comparison(args):
     """Compare two agents running online, search for disagreements"""
     """get agents and environments"""
-    env1, a1 = get_agent(args.a1_config, env_id=args.env_id, seed=args.seed)
+    env1, a1 = get_agent()
     env1.args = args
-    env2, a2 = get_agent(args.a2_config, env=deepcopy(env1))
+    env2, a2 = get_agent(env=deepcopy(env1))
+
+    """agent assessment"""
+    agent_ratio = 1 if not args.agent_assessment else agent_assessment()  # pass agent configuration parameters
 
     """Run"""
     traces = []
     for e in range(args.num_episodes):
         log(f'Running Episode number: {e}', args.verbose)
         curr_obs, _ = env1.reset(), env2.reset()
-        """agent assessment"""
-        agent_ratio = 1 if not args.agent_assessment \
-            else agent_assessment(args.a1_config, args.a2_config)
         """get initial state"""
         t = 0
         done = False
@@ -164,38 +164,10 @@ if __name__ == '__main__':
     parser.add_argument('-ass', '--agent_assessment', help='apply agent ratio by agent score',
                         default=False)
     parser.add_argument('-se', '--seed', help='environment seed', default=0)
+    parser.add_argument('-res', '--results_dir', help='results directory', default='results')
+    parser.add_argument('-tr', '--traces_path', help='path to traces file if exists',
+                        default=None)
     args = parser.parse_args()
-
-    """experiment parameters"""
-    args.a1_config = {
-        "__class__": "<class 'rl_agents.agents.deep_q_network.pytorch.DQNAgent'>",
-    }
-    args.a2_config = {
-        "__class__": "<class 'rl_agents.agents.fitted_q.pytorch.FTQAgent'>",
-        # "__class__": "<class 'rl_agents.agents.deep_q_network.pytorch.DQNAgent'>",
-    }
-
-    # args.fps = 1
-
-    # args.show_score_bar = False
-    # args.n_disagreements = 5
-    # args.randomized = True
-    """get more/less trajectories"""
-    # args.similarity_limit = 3  # int(args.horizon * 0.66)
-    """importance measures"""
-    args.state_importance = "sb"  # "sb" "bety"
-    args.trajectory_importance = "avg"  # last_state, max_min, max_avg, avg, avg_delta
-    args.importance_type = 'state'  # state/trajectory
-
-    """"""
-    args.horizon = 10
-    args.fps = 2
-    args.num_episodes = 3
-    args.a1_name = args.a1_config["__class__"].split('.')[-1][:-2]
-    args.a2_name = args.a2_config["__class__"].split('.')[-1][:-2]
-    args.results_dir = abspath('results')
-    # args.traces_path = join('results', 'DQNAgent_FTQAgent_29-06_10:42:33')
-    args.traces_path = None
 
     """RUN"""
     main(args)

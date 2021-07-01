@@ -2,16 +2,17 @@ import argparse
 from disagreements.logging_info import log
 from get_agent import get_agent
 
-def agent_assessment(a1_config, a2_config):
+
+def agent_assessment(a1_config=None, a2_config=None):
     agent_ratio, a1_overall, a2_overall = assess_agents(a1_config, a2_config)
     msg = f'A1 score: {a1_overall}, A2 score: {a2_overall}, agent_ration: {agent_ratio}'
     log(msg, args.verbose)
     return agent_ratio
 
 
-def assess_agents(a1, a2):
-    a1_overall = agent_score(a1)
-    a2_overall = agent_score(a2)
+def assess_agents(a1_config, a2_config):
+    a1_overall = agent_score(a1_config)
+    a2_overall = agent_score(a2_config)
     if a1_overall < 0 < a2_overall:
         a2_overall += abs(a1_overall)
         a1_overall = 1
