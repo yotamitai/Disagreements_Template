@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from os.path import join
 from scipy.special import softmax
+
+from disagreements.compare_agents import get_agent_action_from_state
+from disagreements.get_agent import get_agent_q_values_from_state
 from disagreements.logging_info import log
 from get_trajectories import trajectory_importance_max_min
 from utils import save_image, create_video, make_clean_dirs, mark_agent
@@ -78,13 +81,12 @@ class DisagreementTrace(object):
 
 
 class State(object):
-    def __init__(self, idx, episode, obs, state, action_values, img, position, **kwargs):
+    def __init__(self, idx, episode, obs, state, action_values, img, **kwargs):
         self.observation = obs
         self.image = img
         self.state = state
         self.action_values = action_values
         self.id = (episode, idx)
-        self.position = position
         self.kwargs = kwargs
 
     def plot_image(self):
@@ -198,7 +200,7 @@ def disagreement(timestep, trace, env2, a2, curr_s, a1):
     trajectory_states, trajectory_scores = \
         disagreement_states(trace, env2, a2, timestep, curr_s)
     a2_s_a_values = [x.action_values for x in trajectory_states]
-    a1_values_for_a2_states = [a1.get_state_action_values(x.state) for x in trajectory_states]
+    a1_values_for_a2_states = [get_agent_q_values_from_state(a1, x.state) for x in trajectory_states]
     trace.a2_s_a_values.append(a2_s_a_values)
     trace.a2_trajectories.append(trajectory_states)
     trace.a2_rewards.append(trajectory_scores)
@@ -248,14 +250,12 @@ def disagreement_states(trace, env, agent, timestep, curr_s):
     next_timestep = timestep + 1
     for step in range(next_timestep, next_timestep + (horizon // 2)):
         if done: break
-        a = agent.act(curr_s)
+        a = get_agent_action_from_state(agent, curr_s)
         new_obs, r, done, info = env.step(a)
         new_s = new_obs
         new_s_a_values = agent.get_state_action_values(new_s)
         new_frame = env.render(mode='rgb_array')
-        new_position = env.vehicle.position
-        new_state = State(step, trace.episode, new_obs, new_s, new_s_a_values, new_frame,
-                          new_position)
+        new_state = State(step, trace.episode, new_obs, new_s, new_s_a_values, new_frame)
         da_states.append(new_state)
         da_rewards.append(r)
         curr_s = new_s

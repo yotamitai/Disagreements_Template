@@ -6,10 +6,14 @@ from agent_score import agent_assessment
 from disagreement import save_disagreements, get_top_k_disagreements, disagreement, \
     DisagreementTrace, State
 from disagreements.logging_info import log, get_logging
-from get_agent import get_agent
+from get_agent import get_agent, get_agent_q_values_from_state, get_agent_action_from_state
 from side_by_side import side_by_side_video
 from utils import load_traces, save_traces
 from copy import deepcopy
+
+def equivalent_env_sanity_check(x, y):
+    for i in range(len(x)):
+        assert x[i] == y[i], 'Nonidentical environment transition'
 
 
 def online_comparison(args):
@@ -31,40 +35,40 @@ def online_comparison(args):
         t = 0
         done = False
         curr_s = curr_obs
-        a1_s_a_values = a1.get_state_action_values(curr_obs)
-        a2_s_a_values = a2.get_state_action_values(curr_obs)
+        a1_s_a_values = get_agent_q_values_from_state(a1, curr_s)
+        a2_s_a_values = get_agent_q_values_from_state(a2,curr_s)
         frame = env1.render(mode='rgb_array')
-        position = env1.vehicle.position
-        state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame, position)
-        a1_a, _ = a1.act(curr_s), a2.act(curr_s)
+        state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame)
+        a1_a = get_agent_action_from_state(a1, curr_s)
+        a2_a = get_agent_action_from_state(a2, curr_s)
         """initiate and update trace"""
         trace = DisagreementTrace(e, args.horizon, agent_ratio)
         trace.update(state, curr_obs, a1_a, a1_s_a_values, a2_s_a_values, 0, False, {})
         while not done:
-            """Observe both agent's desired action"""
-            a1_a = a1.act(curr_s)
-            a2_a = a2.act(curr_s)
             """check for disagreement"""
             if a1_a != a2_a:
-                copy_env2 = deepcopy(env2)
                 log(f'\tDisagreement at step {t}', args.verbose)
                 disagreement(t, trace, env2, a2, curr_s, a1)
                 """return agent 2 to the disagreement state"""
-                env2 = copy_env2
+                env2, _ = get_agent()
+                [env2.reset() for _ in range(e + 1)]
+                [env2.step(a) for a in trace.actions[:-1]]
+                env2.args = args
             """Transition both agent's based on agent 1 action"""
             new_obs, r, done, info = env1.step(a1_a)
             _ = env2.step(a1_a)  # dont need returned values
+            equivalent_env_sanity_check([new_obs, r, done, info], _)
             new_s = new_obs
             """get new state"""
             t += 1
             new_a1_s_a_values = a1.get_state_action_values(new_s)
             new_a2_s_a_values = a2.get_state_action_values(new_s)
             new_frame = env1.render(mode='rgb_array')
-            new_position = env1.vehicle.position
-            new_state = State(t, e, new_obs, new_s, new_a1_s_a_values, new_frame, new_position)
-            new_a = a1.act(curr_s)
+            new_state = State(t, e, new_obs, new_s, new_a1_s_a_values, new_frame)
+            a1_a = get_agent_action_from_state(a1, curr_s)
+            a2_a = get_agent_action_from_state(a2, curr_s)
             """update trace"""
-            trace.update(new_state, new_obs, new_a, new_a1_s_a_values,
+            trace.update(new_state, new_obs, a1_a, new_a1_s_a_values,
                          new_a2_s_a_values, r, done, info)
             """update params for next iteration"""
             curr_s = new_s
