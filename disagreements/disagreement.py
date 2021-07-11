@@ -291,15 +291,19 @@ def get_top_k_disagreements(traces, args):
     for d in top_k_diverse_trajectories:
         log(f'Name: ({d.episode},{d.da_index})')
 
+    return top_k_diverse_trajectories
+
+def make_same_length(trajectories, horizon, traces):
     """make all trajectories the same length"""
-    for d in top_k_diverse_trajectories:
-        if len(d.a1_states) < args.horizon:
+    for d in trajectories:
+        if len(d.a1_states) < horizon:
+            """insert to start of video"""
             da_traj_idx = d.a1_states.index(d.da_index)
-            for _ in range((args.horizon // 2) - da_traj_idx - 1):
+            for _ in range((horizon // 2) - da_traj_idx - 1):
                 d.a1_states.insert(0, d.a1_states[0])
                 d.a2_states.insert(0, d.a1_states[0])
-            """"""
-            while len(d.a1_states) < args.horizon:
+            """insert to end of video"""
+            while len(d.a1_states) < horizon:
                 last_idx = d.a1_states[-1]
                 if last_idx < len(traces[d.episode].states) - 1:
                     last_idx += 1
@@ -307,6 +311,6 @@ def get_top_k_disagreements(traces, args):
                 else:
                     d.a1_states.append(last_idx)
 
-            for _ in range(args.horizon - len(d.a2_states)):
-                d.a2_states.append(d.a2_states[-1])
-    return top_k_diverse_trajectories
+        for _ in range(horizon - len(d.a2_states)):
+            d.a2_states.append(d.a2_states[-1])
+    return trajectories

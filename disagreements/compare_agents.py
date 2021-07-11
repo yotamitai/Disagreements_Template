@@ -4,16 +4,12 @@ from os.path import abspath
 from os.path import join
 from agent_score import agent_assessment
 from disagreement import save_disagreements, get_top_k_disagreements, disagreement, \
-    DisagreementTrace, State
+    DisagreementTrace, State, make_same_length
 from disagreements.logging_info import log, get_logging
 from get_agent import get_agent, get_agent_q_values_from_state, get_agent_action_from_state
 from side_by_side import side_by_side_video
 from utils import load_traces, save_traces
 from copy import deepcopy
-
-def equivalent_env_sanity_check(x, y):
-    for i in range(len(x)):
-        assert x[i] == y[i], 'Nonidentical environment transition'
 
 
 def online_comparison(args):
@@ -57,7 +53,7 @@ def online_comparison(args):
             """Transition both agent's based on agent 1 action"""
             new_obs, r, done, info = env1.step(a1_a)
             _ = env2.step(a1_a)  # dont need returned values
-            equivalent_env_sanity_check([new_obs, r, done, info], _)
+            assert new_obs.tolist() == _[0].tolist(), f'Nonidentical environment transition'
             new_s = new_obs
             """get new state"""
             t += 1
@@ -113,6 +109,9 @@ def main(args):
     """top k diverse disagreements"""
     disagreements = get_top_k_disagreements(traces, args)
     log(f'Obtained {len(disagreements)} disagreements', args.verbose)
+
+    """make all trajectories the same length"""
+    disagreements = make_same_length(disagreements, args.horizon, traces)
 
     """randomize order"""
     if args.randomized: random.shuffle(disagreements)
