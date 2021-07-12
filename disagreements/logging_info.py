@@ -7,8 +7,8 @@ from os.path import abspath, exists, basename, join
 def get_logging(args):
     if not exists(abspath('logs')):
         makedirs('logs')
-    name = '_'.join([basename(args.a1_name), basename(args.a2_name)])
-    file_name = '_'.join([name, datetime.now().strftime("%d-%m %H:%M:%S").replace(' ', '_')])
+    name = '-'.join([basename(args.a1_name), basename(args.a2_name)])
+    file_name = '_'.join([datetime.now().strftime("%Y-%m-%d %H:%M:%S").replace(' ', '_'), name])
     log_name = join('logs', file_name)
     args.output = join('results', file_name)
     logging.basicConfig(filename=log_name + '.log', filemode='w',

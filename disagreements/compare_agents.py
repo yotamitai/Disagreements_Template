@@ -4,9 +4,9 @@ from os.path import abspath
 from os.path import join
 from agent_score import agent_assessment
 from disagreement import save_disagreements, get_top_k_disagreements, disagreement, \
-    DisagreementTrace, State
+    DisagreementTrace, State, make_same_length
 from disagreements.logging_info import log, get_logging
-from get_agent import get_agent
+from get_agent import get_agent, get_agent_q_values_from_state, get_agent_action_from_state
 from side_by_side import side_by_side_video
 from utils import load_traces, save_traces
 from copy import deepcopy
@@ -31,40 +31,40 @@ def online_comparison(args):
         t = 0
         done = False
         curr_s = curr_obs
-        a1_s_a_values = a1.get_state_action_values(curr_obs)
-        a2_s_a_values = a2.get_state_action_values(curr_obs)
+        a1_s_a_values = get_agent_q_values_from_state(a1, curr_s)
+        a2_s_a_values = get_agent_q_values_from_state(a2,curr_s)
         frame = env1.render(mode='rgb_array')
-        position = env1.vehicle.position
-        state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame, position)
-        a1_a, _ = a1.act(curr_s), a2.act(curr_s)
+        state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame)
+        a1_a = get_agent_action_from_state(a1, curr_s)
+        a2_a = get_agent_action_from_state(a2, curr_s)
         """initiate and update trace"""
         trace = DisagreementTrace(e, args.horizon, agent_ratio)
         trace.update(state, curr_obs, a1_a, a1_s_a_values, a2_s_a_values, 0, False, {})
         while not done:
-            """Observe both agent's desired action"""
-            a1_a = a1.act(curr_s)
-            a2_a = a2.act(curr_s)
             """check for disagreement"""
             if a1_a != a2_a:
-                copy_env2 = deepcopy(env2)
                 log(f'\tDisagreement at step {t}', args.verbose)
                 disagreement(t, trace, env2, a2, curr_s, a1)
                 """return agent 2 to the disagreement state"""
-                env2 = copy_env2
+                env2, _ = get_agent()
+                [env2.reset() for _ in range(e + 1)]
+                [env2.step(a) for a in trace.actions[:-1]]
+                env2.args = args
             """Transition both agent's based on agent 1 action"""
             new_obs, r, done, info = env1.step(a1_a)
             _ = env2.step(a1_a)  # dont need returned values
+            assert new_obs.tolist() == _[0].tolist(), f'Nonidentical environment transition'
             new_s = new_obs
             """get new state"""
             t += 1
             new_a1_s_a_values = a1.get_state_action_values(new_s)
             new_a2_s_a_values = a2.get_state_action_values(new_s)
             new_frame = env1.render(mode='rgb_array')
-            new_position = env1.vehicle.position
-            new_state = State(t, e, new_obs, new_s, new_a1_s_a_values, new_frame, new_position)
-            new_a = a1.act(curr_s)
+            new_state = State(t, e, new_obs, new_s, new_a1_s_a_values, new_frame)
+            a1_a = get_agent_action_from_state(a1, curr_s)
+            a2_a = get_agent_action_from_state(a2, curr_s)
             """update trace"""
-            trace.update(new_state, new_obs, new_a, new_a1_s_a_values,
+            trace.update(new_state, new_obs, a1_a, new_a1_s_a_values,
                          new_a2_s_a_values, r, done, info)
             """update params for next iteration"""
             curr_s = new_s
@@ -79,16 +79,16 @@ def online_comparison(args):
 
 
 def rank_trajectories(traces, importance_type, state_importance, traj_importance):
-    # TODO check that trajectories are being summed correctly (different lengths)
-    # check that
     for trace in traces:
+        a1_q_max, a2_q_max = trace.a1_max_q_val, trace.a2_max_q_val
         for i, trajectory in enumerate(trace.disagreement_trajectories):
             if importance_type == 'state':
-                importance = trajectory.calculate_state_importance(state_importance)
+                importance = trajectory.calculate_state_importance(state_importance, a1_q_max, a2_q_max)
             else:
                 # TODO check that all importance criteria work
                 importance = trajectory.calculate_trajectory_importance(trace, i, traj_importance,
-                                                                        state_importance)
+                                                                        state_importance,
+                                                                        a1_q_max, a2_q_max)
             trajectory.importance = importance
 
 
@@ -109,6 +109,9 @@ def main(args):
     """top k diverse disagreements"""
     disagreements = get_top_k_disagreements(traces, args)
     log(f'Obtained {len(disagreements)} disagreements', args.verbose)
+
+    """make all trajectories the same length"""
+    disagreements = make_same_length(disagreements, args.horizon, traces)
 
     """randomize order"""
     if args.randomized: random.shuffle(disagreements)
@@ -140,8 +143,8 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='RL Agent Comparisons')
     parser.add_argument('-env', '--env_id', help='environment name', default="highway_local-v0")
-    parser.add_argument('-a1', '--a1_name', help='agent name', type=str, default="Agent-1")
-    parser.add_argument('-a2', '--a2_name', help='agent name', type=str, default="Agent-2")
+    parser.add_argument('-a1', '--a1_config', help='agent name', type=str, default="Agent-1")
+    parser.add_argument('-a2', '--a2_config', help='agent name', type=str, default="Agent-2")
     parser.add_argument('-n', '--num_episodes', help='number of episodes to run', type=int,
                         default=3)
     parser.add_argument('-fps', '--fps', help='summary video fps', type=int, default=1)
@@ -168,6 +171,15 @@ if __name__ == '__main__':
     parser.add_argument('-tr', '--traces_path', help='path to traces file if exists',
                         default=None)
     args = parser.parse_args()
+
+    args.a1_config = {
+        "name": NotImplemented,
+        "path": NotImplemented,
+    }
+    args.a2_config = {
+        "name": NotImplemented,
+        "path": NotImplemented,
+    }
 
     """RUN"""
     main(args)

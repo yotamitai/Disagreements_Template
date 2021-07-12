@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from os.path import join
 from scipy.special import softmax
+
+from disagreements.compare_agents import get_agent_action_from_state
+from disagreements.get_agent import get_agent_q_values_from_state
 from disagreements.logging_info import log
 from get_trajectories import trajectory_importance_max_min
 from utils import save_image, create_video, make_clean_dirs, mark_agent
@@ -24,6 +27,8 @@ class DisagreementTrace(object):
         self.episode = episode
         self.a1_rewards = []
         self.a2_rewards = []
+        self.a1_max_q_val = 0
+        self.a2_max_q_val = 0
         self.agent_ratio = agent_ratio
         self.disagreement_indexes = []
         self.importance_scores = []
@@ -46,6 +51,8 @@ class DisagreementTrace(object):
         self.length += 1
         self.a1_s_a_values.append(a1_s_a_values)
         self.a2_values_for_a1_states.append(a2_values_for_a1_states)
+        self.a1_max_q_val = max(max(a1_s_a_values), self.a1_max_q_val)
+        self.a2_max_q_val = max(max(a2_values_for_a1_states), self.a2_max_q_val)
 
     def get_trajectories(self):
         """for each trajectory of agent 2 - find corresponding trajectory of agent 1"""
@@ -72,19 +79,18 @@ class DisagreementTrace(object):
         assert len(a2_frames) == self.trajectory_length, 'Error in highlight frame length'
         da_index = self.trajectory_length // 2 - 1
         if mark_position:
-            a1_frames[da_index] = mark_agent(a1_frames[da_index], position=mark_position)
-            a2_frames[da_index] = a1_frames[da_index]
+            for i in range(da_index - 1, da_index + 3):
+                a1_frames[i] = mark_agent(a1_frames[i], position=mark_position)
+                a2_frames[i] = a1_frames[i]
         return a1_frames, a2_frames
 
-
 class State(object):
-    def __init__(self, idx, episode, obs, state, action_values, img, position, **kwargs):
+    def __init__(self, idx, episode, obs, state, action_values, img, **kwargs):
         self.observation = obs
         self.image = img
         self.state = state
         self.action_values = action_values
         self.id = (episode, idx)
-        self.position = position
         self.kwargs = kwargs
 
     def plot_image(self):
@@ -119,30 +125,35 @@ class DisagreementTrajectory(object):
             "avg_delta": trajectory_importance_max_min,
         }
 
-    def calculate_state_importance(self, importance):
+    def calculate_state_importance(self, importance, a1_q_max, a2_q_max):
         self.state_importance = importance
         da_idx = self.da_index
         traj_da_idx = self.a1_states.index(da_idx)
-        return self.state_disagreement_score(self.a1_s_a_values[traj_da_idx],
-                                             self.a2_s_a_values[traj_da_idx], importance)
+        return self.state_disagreement_score(self.a1_s_a_values[traj_da_idx]/a1_q_max,
+                                             self.a2_s_a_values[traj_da_idx]/a2_q_max
+                                             , importance)
 
-    def calculate_trajectory_importance(self, trace, i, trajectory_importance, state_importance):
+    def calculate_trajectory_importance(self, trace, i, trajectory_importance, state_importance,
+                                        a1_q_max, a2_q_max):
         """calculate trajectory score"""
         s_i, e_i = min(self.a1_states), max(self.a1_states) + 1
         a1_states, a2_states = trace.states[s_i: e_i], trace.a2_trajectories[i]
         self.trajectory_importance = trajectory_importance
         self.state_importance = state_importance
         if trajectory_importance == "last_state":
-            return self.trajectory_importance_last_state(a1_states[-1], a2_states[-1])
+            return self.trajectory_importance_last_state(a1_states[-1], a2_states[-1],
+                                                         a1_q_max, a2_q_max)
         else:
-            return self.get_trajectory_importance(trajectory_importance, state_importance)
+            return self.get_trajectory_importance(trajectory_importance, state_importance,
+                                                  a1_q_max, a2_q_max)
 
-    def get_trajectory_importance(self, trajectory_importance, state_importance):
+    def get_trajectory_importance(self, trajectory_importance, state_importance,
+                                  a1_q_max, a2_q_max):
         """state values"""
-        s1_a1_vals = self.a1_s_a_values
-        s1_a2_vals = self.a2_values_for_a1_states
-        s2_a1_vals = self.a1_values_for_a2_states
-        s2_a2_vals = self.a2_s_a_values
+        s1_a1_vals = np.array(self.a1_s_a_values) / a1_q_max
+        s1_a2_vals = np.array(self.a2_values_for_a1_states) / a2_q_max
+        s2_a1_vals = np.array(self.a1_values_for_a2_states) / a1_q_max
+        s2_a2_vals = np.array(self.a2_s_a_values) / a2_q_max
         """calculate value of all individual states in both trajectories,
          as ranked by both agents"""
         traj1_importance_of_states = [
@@ -157,13 +168,13 @@ class DisagreementTrajectory(object):
         """return the difference between them. bigger == greater disagreement"""
         return abs(traj1_score - traj2_score)
 
-    def trajectory_importance_last_state(self, s1, s2):
+    def trajectory_importance_last_state(self, s1, s2, a1_q_max, a2_q_max):
         """state values"""
         if s1.state.tolist() == s2.state.tolist(): return 0
-        s1_a1_vals = self.a1_s_a_values[-1]
-        s1_a2_vals = self.a2_values_for_a1_states[-1]
-        s2_a1_vals = self.a1_values_for_a2_states[-1]
-        s2_a2_vals = self.a2_s_a_values[-1]
+        s1_a1_vals = self.a1_s_a_values[-1] / a1_q_max
+        s1_a2_vals = self.a2_values_for_a1_states[-1] / a2_q_max
+        s2_a1_vals = self.a1_values_for_a2_states[-1] / a1_q_max
+        s2_a2_vals = self.a2_s_a_values[-1] / a2_q_max
         """the value of the state is defined by the best available action from it"""
         s1_score = max(s1_a1_vals) * self.agent_ratio + max(s1_a2_vals)
         s2_score = max(s2_a1_vals) * self.agent_ratio + max(s2_a2_vals)
@@ -198,7 +209,7 @@ def disagreement(timestep, trace, env2, a2, curr_s, a1):
     trajectory_states, trajectory_scores = \
         disagreement_states(trace, env2, a2, timestep, curr_s)
     a2_s_a_values = [x.action_values for x in trajectory_states]
-    a1_values_for_a2_states = [a1.get_state_action_values(x.state) for x in trajectory_states]
+    a1_values_for_a2_states = [get_agent_q_values_from_state(a1, x.state) for x in trajectory_states]
     trace.a2_s_a_values.append(a2_s_a_values)
     trace.a2_trajectories.append(trajectory_states)
     trace.a2_rewards.append(trajectory_scores)
@@ -210,11 +221,14 @@ def save_disagreements(a1_DAs, a2_DAs, output_dir, fps):
     highlight_frames_dir = join(output_dir, "highlight_frames")
     video_dir = join(output_dir, "videos")
     make_clean_dirs(video_dir)
+    make_clean_dirs(join(video_dir, 'temp'))
     make_clean_dirs(highlight_frames_dir)
+    dir = join(video_dir, 'temp')
 
     height, width, layers = a1_DAs[0][0].shape
     size = (width, height)
     trajectory_length = len(a1_DAs[0])
+    da_idx = trajectory_length // 2
     for hl_i in range(len(a1_DAs)):
         for img_i in range(len(a1_DAs[hl_i])):
             save_image(highlight_frames_dir, "a1_DA{}_Frame{}".format(str(hl_i), str(img_i)),
@@ -222,12 +236,16 @@ def save_disagreements(a1_DAs, a2_DAs, output_dir, fps):
             save_image(highlight_frames_dir, "a2_DA{}_Frame{}".format(str(hl_i), str(img_i)),
                        a2_DAs[hl_i][img_i])
 
-        create_video(highlight_frames_dir, video_dir, "a1_DA" + str(hl_i), size,
-                     trajectory_length, fps)
-        create_video(highlight_frames_dir, video_dir, "a2_DA" + str(hl_i), size,
-                     trajectory_length, fps)
+        """up to disagreement"""
+        create_video('together' + str(hl_i), highlight_frames_dir, dir, "a1_DA" + str(hl_i), size,
+                     da_idx, fps, add_pause=[0, 2])
+        """from disagreement"""
+        name1, name2 = "a1_DA" + str(hl_i), "a2_DA" + str(hl_i)
+        create_video(name1, highlight_frames_dir, dir, name1, size,
+                     trajectory_length, fps, start=da_idx, add_pause=[2, 0])
+        create_video(name2, highlight_frames_dir, dir, name2, size,
+                     trajectory_length, fps, start=da_idx, add_pause=[2, 0])
     return video_dir
-
 
 def get_pre_disagreement_states(t, horizon, states):
     start = t - (horizon // 2) + 1
@@ -248,17 +266,16 @@ def disagreement_states(trace, env, agent, timestep, curr_s):
     next_timestep = timestep + 1
     for step in range(next_timestep, next_timestep + (horizon // 2)):
         if done: break
-        a = agent.act(curr_s)
+        a = get_agent_action_from_state(agent, curr_s)
         new_obs, r, done, info = env.step(a)
         new_s = new_obs
         new_s_a_values = agent.get_state_action_values(new_s)
         new_frame = env.render(mode='rgb_array')
-        new_position = env.vehicle.position
-        new_state = State(step, trace.episode, new_obs, new_s, new_s_a_values, new_frame,
-                          new_position)
+        new_state = State(step, trace.episode, new_obs, new_s, new_s_a_values, new_frame)
         da_states.append(new_state)
         da_rewards.append(r)
         curr_s = new_s
+        trace.a2_max_q_val = max(max(new_s_a_values), trace.a2_max_q_val)
     return da_states, da_rewards
 
 
@@ -291,15 +308,19 @@ def get_top_k_disagreements(traces, args):
     for d in top_k_diverse_trajectories:
         log(f'Name: ({d.episode},{d.da_index})')
 
+    return top_k_diverse_trajectories
+
+def make_same_length(trajectories, horizon, traces):
     """make all trajectories the same length"""
-    for d in top_k_diverse_trajectories:
-        if len(d.a1_states) < args.horizon:
+    for d in trajectories:
+        if len(d.a1_states) < horizon:
+            """insert to start of video"""
             da_traj_idx = d.a1_states.index(d.da_index)
-            for _ in range((args.horizon // 2) - da_traj_idx - 1):
+            for _ in range((horizon // 2) - da_traj_idx - 1):
                 d.a1_states.insert(0, d.a1_states[0])
                 d.a2_states.insert(0, d.a1_states[0])
-            """"""
-            while len(d.a1_states) < args.horizon:
+            """insert to end of video"""
+            while len(d.a1_states) < horizon:
                 last_idx = d.a1_states[-1]
                 if last_idx < len(traces[d.episode].states) - 1:
                     last_idx += 1
@@ -307,6 +328,6 @@ def get_top_k_disagreements(traces, args):
                 else:
                     d.a1_states.append(last_idx)
 
-            for _ in range(args.horizon - len(d.a2_states)):
-                d.a2_states.append(d.a2_states[-1])
-    return top_k_diverse_trajectories
+        for _ in range(horizon - len(d.a2_states)):
+            d.a2_states.append(d.a2_states[-1])
+    return trajectories

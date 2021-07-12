@@ -1,8 +1,8 @@
 import gym
+from stable_baselines import DQN
 
-
-env = NotImplemented
-agent = NotImplemented
+env = gym.make('BreakoutNoFrameskip-v4')
+agent = DQN.load('/home/yotama/OneDrive/Local_Git/rl-baselines3-zoo/rl-trained-agents/dqn/BreakoutNoFrameskip-v4_1/BreakoutNoFrameskip-v4_1.zip', env)
 
 # Evaluate the agent
 obs = env.reset()
