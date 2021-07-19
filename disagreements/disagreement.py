@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import imageio
 import numpy as np
 import matplotlib.pyplot as plt
@@ -72,16 +74,22 @@ class DisagreementTrace(object):
             self.a1_trajectory_indexes.append(a1_traj_indexes)
             self.disagreement_trajectories.append(dt)
 
-    def get_frames(self, s1_indexes, s2_indexes, s2_traj, mark_position=None):
+    def get_frames(self, s1_indexes, s2_indexes, s2_traj, mark_position=None, actions=None):
         a1_frames = [self.states[x].image for x in s1_indexes]
         a2_frames = [self.a2_trajectories[s2_traj][x - min(s2_indexes)].image for x in s2_indexes]
         assert len(a1_frames) == self.trajectory_length, 'Error in highlight frame length'
         assert len(a2_frames) == self.trajectory_length, 'Error in highlight frame length'
         da_index = self.trajectory_length // 2 - 1
         if mark_position:
-            for i in range(da_index - 1, da_index + 3):
-                a1_frames[i] = mark_agent(a1_frames[i], position=mark_position)
-                a2_frames[i] = a1_frames[i]
+            """mark disagreement state"""
+            a1_frames[da_index] = mark_agent(a1_frames[da_index], text='Disagreement',
+                                             position=mark_position)
+            a2_frames[da_index] = a1_frames[da_index]
+            """mark chosen action"""
+            a1_frames[da_index + 1] = mark_agent(a1_frames[da_index + 1], action=actions[0],
+                                                 position=mark_position)
+            a2_frames[da_index + 1] = mark_agent(a2_frames[da_index + 1], action=actions[1],
+                                                 position=mark_position)
         return a1_frames, a2_frames
 
 class State(object):
@@ -238,13 +246,13 @@ def save_disagreements(a1_DAs, a2_DAs, output_dir, fps):
 
         """up to disagreement"""
         create_video('together' + str(hl_i), highlight_frames_dir, dir, "a1_DA" + str(hl_i), size,
-                     da_idx, fps, add_pause=[0, 2])
+                     da_idx, fps, add_pause=[0, 4])
         """from disagreement"""
         name1, name2 = "a1_DA" + str(hl_i), "a2_DA" + str(hl_i)
         create_video(name1, highlight_frames_dir, dir, name1, size,
-                     trajectory_length, fps, start=da_idx, add_pause=[2, 0])
+                     trajectory_length, fps, start=da_idx, add_pause=[7, 0])
         create_video(name2, highlight_frames_dir, dir, name2, size,
-                     trajectory_length, fps, start=da_idx, add_pause=[2, 0])
+                     trajectory_length, fps, start=da_idx, add_pause=[7, 0])
     return video_dir
 
 def get_pre_disagreement_states(t, horizon, states):
@@ -261,7 +269,10 @@ def disagreement_states(trace, env, agent, timestep, curr_s):
     horizon, da_rewards = env.args.horizon, []
     start = timestep - (horizon // 2) + 1
     if start < 0: start = 0
-    da_states = trace.states[start:]
+    trajectory_states = trace.states[start:]
+    da_state = deepcopy(trajectory_states[-1])
+    da_state.action_values = agent.get_state_action_values(curr_s)
+    trajectory_states[-1] = da_state
     done = False
     next_timestep = timestep + 1
     for step in range(next_timestep, next_timestep + (horizon // 2)):
@@ -272,11 +283,11 @@ def disagreement_states(trace, env, agent, timestep, curr_s):
         new_s_a_values = agent.get_state_action_values(new_s)
         new_frame = env.render(mode='rgb_array')
         new_state = State(step, trace.episode, new_obs, new_s, new_s_a_values, new_frame)
-        da_states.append(new_state)
+        trajectory_states.append(new_state)
         da_rewards.append(r)
         curr_s = new_s
         trace.a2_max_q_val = max(max(new_s_a_values), trace.a2_max_q_val)
-    return da_states, da_rewards
+    return trajectory_states, da_rewards
 
 
 def get_top_k_disagreements(traces, args):

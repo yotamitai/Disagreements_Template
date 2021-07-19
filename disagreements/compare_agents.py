@@ -2,6 +2,9 @@ import argparse
 import random
 from os.path import abspath
 from os.path import join
+
+from numpy import argmax
+
 from agent_score import agent_assessment
 from disagreement import save_disagreements, get_top_k_disagreements, disagreement, \
     DisagreementTrace, State, make_same_length
@@ -26,21 +29,20 @@ def online_comparison(args):
     traces = []
     for e in range(args.num_episodes):
         log(f'Running Episode number: {e}', args.verbose)
-        curr_obs, _ = env1.reset(), env2.reset()
-        """get initial state"""
-        t = 0
-        done = False
-        curr_s = curr_obs
-        a1_s_a_values = get_agent_q_values_from_state(a1, curr_s)
-        a2_s_a_values = get_agent_q_values_from_state(a2,curr_s)
-        frame = env1.render(mode='rgb_array')
-        state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame)
-        a1_a = get_agent_action_from_state(a1, curr_s)
-        a2_a = get_agent_action_from_state(a2, curr_s)
-        """initiate and update trace"""
         trace = DisagreementTrace(e, args.horizon, agent_ratio)
-        trace.update(state, curr_obs, a1_a, a1_s_a_values, a2_s_a_values, 0, False, {})
+        curr_obs, _ = env1.reset(), env2.reset()
+        t, r, done = 0, 0, False
+        done = False
         while not done:
+            curr_s = curr_obs
+            a1_s_a_values = get_agent_q_values_from_state(a1, curr_s)
+            a2_s_a_values = get_agent_q_values_from_state(a2, curr_s)
+            frame = env1.render(mode='rgb_array')
+            state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame)
+            a1_a = get_agent_action_from_state(a1, curr_s)
+            a2_a = get_agent_action_from_state(a2, curr_s)
+            """initiate and update trace"""
+            trace.update(state, curr_obs, a1_a, a1_s_a_values, a2_s_a_values, r, done, {})
             """check for disagreement"""
             if a1_a != a2_a:
                 log(f'\tDisagreement at step {t}', args.verbose)
@@ -51,23 +53,11 @@ def online_comparison(args):
                 [env2.step(a) for a in trace.actions[:-1]]
                 env2.args = args
             """Transition both agent's based on agent 1 action"""
-            new_obs, r, done, info = env1.step(a1_a)
+            curr_obs, r, done, info = env1.step(a1_a)
             _ = env2.step(a1_a)  # dont need returned values
-            assert new_obs.tolist() == _[0].tolist(), f'Nonidentical environment transition'
-            new_s = new_obs
-            """get new state"""
+            assert curr_obs.tolist() == _[0].tolist(), f'Nonidentical environment transition'
             t += 1
-            new_a1_s_a_values = a1.get_state_action_values(new_s)
-            new_a2_s_a_values = a2.get_state_action_values(new_s)
-            new_frame = env1.render(mode='rgb_array')
-            new_state = State(t, e, new_obs, new_s, new_a1_s_a_values, new_frame)
-            a1_a = get_agent_action_from_state(a1, curr_s)
-            a2_a = get_agent_action_from_state(a2, curr_s)
-            """update trace"""
-            trace.update(new_state, new_obs, a1_a, new_a1_s_a_values,
-                         new_a2_s_a_values, r, done, info)
-            """update params for next iteration"""
-            curr_s = new_s
+
         """end of episode"""
         trace.get_trajectories()
         traces.append(deepcopy(trace))
@@ -83,7 +73,8 @@ def rank_trajectories(traces, importance_type, state_importance, traj_importance
         a1_q_max, a2_q_max = trace.a1_max_q_val, trace.a2_max_q_val
         for i, trajectory in enumerate(trace.disagreement_trajectories):
             if importance_type == 'state':
-                importance = trajectory.calculate_state_importance(state_importance, a1_q_max, a2_q_max)
+                importance = trajectory.calculate_state_importance(state_importance, a1_q_max,
+                                                                   a2_q_max)
             else:
                 # TODO check that all importance criteria work
                 importance = trajectory.calculate_trajectory_importance(trace, i, traj_importance,
@@ -119,9 +110,11 @@ def main(args):
     """get frames and mark disagreement frame"""
     a1_disagreement_frames, a2_disagreement_frames = [], []
     for d in disagreements:
-        a1_frames, a2_frames = traces[d.episode].get_frames(d.a1_states, d.a2_states,
-                                                            d.trajectory_index,
-                                                            mark_position=[164, 66])
+        t = traces[d.episode]
+        relative_idx = d.da_index - d.a1_states[0]
+        actions = argmax(d.a1_s_a_values[relative_idx]), argmax(d.a2_s_a_values[relative_idx])
+        a1_frames, a2_frames = t.get_frames(d.a1_states, d.a2_states, d.trajectory_index,
+                                            mark_position=[164, 66], actions=actions)
         a1_disagreement_frames.append(a1_frames)
         a2_disagreement_frames.append(a2_frames)
 
@@ -132,7 +125,7 @@ def main(args):
 
     """generate video"""
     fade_duration = 2
-    fade_out_frame = args.horizon - fade_duration
+    fade_out_frame = args.horizon - fade_duration + 11  # +11 from pause in save_disagreements
     side_by_side_video(video_dir, args.n_disagreements, fade_out_frame, name)
     log(f'DAs Video Generated', args.verbose)
 

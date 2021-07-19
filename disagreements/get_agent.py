@@ -1,5 +1,7 @@
 import gym
 
+ACTION_DICT = NotImplemented #TODO
+# example:{0: 'LANE_LEFT', 1: 'IDLE', 2: 'LANE_RIGHT', 3: 'FASTER', 4: 'SLOWER'}
 
 def get_agent(env=None, config=None):
     """Implement here for specific agent and environment loading scheme"""
