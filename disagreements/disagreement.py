@@ -148,11 +148,12 @@ class DisagreementTrajectory(object):
     def calculate_trajectory_importance(self, trace, i, trajectory_importance, state_importance):
         """calculate trajectory score"""
         s_i, e_i = min(self.a1_states), max(self.a1_states) + 1
-        a1_states, a2_states = trace.states[s_i: e_i], trace.a2_trajectories[i]
+        a1_states, a2_states = trace.states[s_i: e_i], trace.a2_trajectories[i][s_i: e_i]
         self.trajectory_importance = trajectory_importance
         self.state_importance = state_importance
         if trajectory_importance == "last_state":
-            return self.trajectory_importance_last_state(a1_states[-1], a2_states[-1])
+            return 0 if a1_states[-1].state.tolist() == a2_states[-1].state.tolist() else \
+                self.trajectory_importance_last_state()
         else:
             return self.get_trajectory_importance(trajectory_importance, state_importance)
 
@@ -176,9 +177,8 @@ class DisagreementTrajectory(object):
         """return the difference between them. bigger == greater disagreement"""
         return abs(traj1_score - traj2_score)
 
-    def trajectory_importance_last_state(self, s1, s2):
+    def trajectory_importance_last_state(self,):
         """state values"""
-        if s1.state.tolist() == s2.state.tolist(): return 0
         s1_a1_vals = self.a1_s_a_values[-1]
         s1_a2_vals = self.a2_values_for_a1_states[-1]
         s2_a1_vals = self.a1_values_for_a2_states[-1]
