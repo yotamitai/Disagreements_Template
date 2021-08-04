@@ -35,16 +35,17 @@ def online_comparison(args):
         assert curr_obs.tolist() == _.tolist(), f'Nonidentical environment'
         a1.previous_state = a2.previous_state = curr_obs
         t, r, done = 0, 0, False
+        """initial state"""
+        curr_s = curr_obs
+        a1_s_a_values = get_agent_q_values_from_state(a1, curr_s)
+        a2_s_a_values = get_agent_q_values_from_state(a2, curr_s)
+        frame = env1.render(mode='rgb_array')
+        state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame)
+        a1_a = get_agent_action_from_state(a1, curr_s)
+        a2_a = get_agent_action_from_state(a2, curr_s)
+        """initiate and update trace"""
+        trace.update(state, curr_obs, a1_a, a1_s_a_values, a2_s_a_values, r, done, {})
         while not done:
-            curr_s = curr_obs
-            a1_s_a_values = get_agent_q_values_from_state(a1, curr_s)
-            a2_s_a_values = get_agent_q_values_from_state(a2, curr_s)
-            frame = env1.render(mode='rgb_array')
-            state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame)
-            a1_a = get_agent_action_from_state(a1, curr_s)
-            a2_a = get_agent_action_from_state(a2, curr_s)
-            """initiate and update trace"""
-            trace.update(state, curr_obs, a1_a, a1_s_a_values, a2_s_a_values, r, done, {})
             """check for disagreement"""
             if a1_a != a2_a:
                 log(f'\tDisagreement at step {t}', args.verbose)
@@ -55,10 +56,19 @@ def online_comparison(args):
                 [env2.step(a) for a in trace.actions[:-1]]
                 env2.args = args
             """Transition both agent's based on agent 1 action"""
+            t += 1
             curr_obs, r, done, info = env1.step(a1_a)
             _ = env2.step(a1_a)  # dont need returned values
             assert curr_obs.tolist() == _[0].tolist(), f'Nonidentical environment transition'
-            t += 1
+            curr_s = curr_obs
+            a1_s_a_values = get_agent_q_values_from_state(a1, curr_s)
+            a2_s_a_values = get_agent_q_values_from_state(a2, curr_s)
+            frame = env1.render(mode='rgb_array')
+            state = State(t, e, curr_obs, curr_s, a1_s_a_values, frame)
+            a1_a = get_agent_action_from_state(a1, curr_s)
+            a2_a = get_agent_action_from_state(a2, curr_s)
+            """initiate and update trace"""
+            trace.update(state, curr_obs, a1_a, a1_s_a_values, a2_s_a_values, r, done, {})
 
         """end of episode"""
         trace.get_trajectories()
