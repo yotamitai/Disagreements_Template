@@ -8,6 +8,7 @@ from numpy import argmax
 from agent_score import agent_assessment
 from disagreement import save_disagreements, get_top_k_disagreements, disagreement, \
     DisagreementTrace, State, make_same_length
+from disagreements.get_trajectories import rank_trajectories
 from disagreements.logging_info import log, get_logging
 from get_agent import get_agent, get_agent_q_values_from_state, get_agent_action_from_state
 from side_by_side import side_by_side_video
@@ -19,8 +20,8 @@ def online_comparison(args):
     """Compare two agents running online, search for disagreements"""
     """get agents and environments"""
     env1, a1 = get_agent()
-    env1.args = args
-    env2, a2 = get_agent(env=deepcopy(env1))
+    env2, a2 = get_agent()
+    env1.args = env2.args = args
 
     """agent assessment"""
     agent_ratio = 1 if not args.agent_assessment else agent_assessment()  # pass agent configuration parameters
@@ -31,8 +32,9 @@ def online_comparison(args):
         log(f'Running Episode number: {e}', args.verbose)
         trace = DisagreementTrace(e, args.horizon, agent_ratio)
         curr_obs, _ = env1.reset(), env2.reset()
+        assert curr_obs.tolist() == _.tolist(), f'Nonidentical environment'
+        a1.previous_state = a2.previous_state = curr_obs
         t, r, done = 0, 0, False
-        done = False
         while not done:
             curr_s = curr_obs
             a1_s_a_values = get_agent_q_values_from_state(a1, curr_s)
@@ -68,29 +70,13 @@ def online_comparison(args):
     return traces
 
 
-def rank_trajectories(traces, importance_type, state_importance, traj_importance):
-    for trace in traces:
-        a1_q_max, a2_q_max = trace.a1_max_q_val, trace.a2_max_q_val
-        for i, trajectory in enumerate(trace.disagreement_trajectories):
-            if importance_type == 'state':
-                importance = trajectory.calculate_state_importance(state_importance, a1_q_max,
-                                                                   a2_q_max)
-            else:
-                # TODO check that all importance criteria work
-                importance = trajectory.calculate_trajectory_importance(trace, i, traj_importance,
-                                                                        state_importance,
-                                                                        a1_q_max, a2_q_max)
-            trajectory.importance = importance
-
-
 def main(args):
-    name, file_name = get_logging(args)
+    name = get_logging(args)
     traces = load_traces(args.traces_path) if args.traces_path else online_comparison(args)
     log(f'Obtained traces', args.verbose)
 
     """save traces"""
-    output_dir = join(args.results_dir, file_name)
-    save_traces(traces, output_dir)
+    save_traces(traces, args.output)
     log(f'Saved traces', args.verbose)
 
     """rank disagreement trajectories by importance measures"""
@@ -114,12 +100,12 @@ def main(args):
         relative_idx = d.da_index - d.a1_states[0]
         actions = argmax(d.a1_s_a_values[relative_idx]), argmax(d.a2_s_a_values[relative_idx])
         a1_frames, a2_frames = t.get_frames(d.a1_states, d.a2_states, d.trajectory_index,
-                                            mark_position=[164, 66], actions=actions)
+                                            actions=actions)
         a1_disagreement_frames.append(a1_frames)
         a2_disagreement_frames.append(a2_frames)
 
     """save disagreement frames"""
-    video_dir = save_disagreements(a1_disagreement_frames, a2_disagreement_frames, output_dir,
+    video_dir = save_disagreements(a1_disagreement_frames, a2_disagreement_frames, args.output,
                                    args.fps)
     log(f'Disagreements saved', args.verbose)
 
@@ -130,7 +116,7 @@ def main(args):
     log(f'DAs Video Generated', args.verbose)
 
     """ writes results to files"""
-    log(f'\nResults written to:\n\t\'{output_dir}\'', args.verbose)
+    log(f'\nResults written to:\n\t\'{args.output_dir}\'', args.verbose)
 
 
 if __name__ == '__main__':
