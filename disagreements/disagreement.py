@@ -93,7 +93,7 @@ class DisagreementTrace(object):
             a1_frames[da_index + 1] = mark_agent(a1_frames[da_index + 1], action=actions[0],
                                                  position=mark_position)
             a2_frames[da_index + 1] = mark_agent(a2_frames[da_index + 1], action=actions[1],
-                                                 position=mark_position)
+                                                 position=mark_position, color=0)
         return a1_frames, a2_frames
 
 
