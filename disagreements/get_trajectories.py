@@ -1,14 +1,14 @@
-def rank_trajectories(traces, importance_type, state_importance, traj_importance):
+def rank_trajectories(traces, summary_importance):
     for trace in traces:
         a1_q_max, a2_q_max = trace.a1_max_q_val, trace.a2_max_q_val
         a1_q_min, a2_q_min = trace.a1_min_q_val, trace.a2_min_q_val
         for i, trajectory in enumerate(trace.disagreement_trajectories):
             trajectory.normalize_q_values(a1_q_max, a1_q_min, a2_q_max, a2_q_min)
-            if importance_type == 'state':
-                importance = trajectory.calculate_state_importance(state_importance)
+            if summary_importance in ["sb", "bety"]:
+                importance = trajectory.calculate_state_disagreement_extent(summary_importance)
             else:
-                importance = trajectory.calculate_trajectory_importance(trace, i, traj_importance,
-                                                                        state_importance)
+                importance = \
+                    trajectory.calculate_trajectory_importance(trace, i, summary_importance)
             trajectory.importance = importance
 
 def trajectory_importance_max_min(states_importance):

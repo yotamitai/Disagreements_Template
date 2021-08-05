@@ -138,51 +138,52 @@ class DisagreementTrajectory(object):
             "avg_delta": trajectory_importance_max_min,
         }
 
-    def calculate_state_importance(self, importance):
+    def calculate_state_disagreement_extent(self, importance):
         self.state_importance = importance
         da_idx = self.da_index
         traj_da_idx = self.a1_states.index(da_idx)
-        return self.state_disagreement_score(self.a1_s_a_values[traj_da_idx],
-                                             self.a2_s_a_values[traj_da_idx], importance)
+        s1_vals, s2_vals = self.a1_s_a_values[traj_da_idx], self.a2_s_a_values[traj_da_idx]
+        if importance == 'sb':
+            return self.second_best_confidence(s1_vals, s2_vals)
+        elif importance == 'bety':
+            return self.better_than_you_confidence(s1_vals, s2_vals)
 
-    def calculate_trajectory_importance(self, trace, i, trajectory_importance, state_importance):
+    def calculate_trajectory_importance(self, trace, i, importance):
         """calculate trajectory score"""
-        s_i, e_i = min(self.a1_states), max(self.a1_states) + 1
-        a1_states, a2_states = trace.states[s_i: e_i], trace.a2_trajectories[i][s_i: e_i]
-        self.trajectory_importance = trajectory_importance
-        self.state_importance = state_importance
-        if trajectory_importance == "last_state":
-            return 0 if a1_states[-1].state.tolist() == a2_states[-1].state.tolist() else \
-                self.trajectory_importance_last_state()
+        s_i, e_i = self.a1_states[0], self.a1_states[-1]
+        self.trajectory_importance = importance
+        rel_idx = e_i - s_i
+        if importance == "last_state":
+            s1, s2 = trace.states[e_i], trace.a2_trajectories[i][rel_idx]
+            return self.trajectory_importance_last_state(s1, s2, rel_idx)
         else:
-            return self.get_trajectory_importance(trajectory_importance, state_importance)
+            return self.get_trajectory_importance(importance, rel_idx)
 
-    def get_trajectory_importance(self, trajectory_importance, state_importance):
+    def get_trajectory_importance(self, importance, end):
         """state values"""
-        s1_a1_vals = np.array(self.a1_s_a_values)
-        s1_a2_vals = np.array(self.a2_values_for_a1_states)
-        s2_a1_vals = np.array(self.a1_values_for_a2_states)
-        s2_a2_vals = np.array(self.a2_s_a_values)
+        s1_a1_vals = self.a1_s_a_values
+        s1_a2_vals = self.a2_values_for_a1_states
+        s2_a1_vals = self.a1_values_for_a2_states[:end + 1]
+        s2_a2_vals = self.a2_s_a_values[:end + 1]
         """calculate value of all individual states in both trajectories,
          as ranked by both agents"""
-        traj1_importance_of_states = [
-            self.state_disagreement_score(s1_a1_vals[i], s1_a2_vals[i], state_importance) for i
-            in range(len(s1_a1_vals))]
-        traj2_importance_of_states = [
-            self.state_disagreement_score(s2_a1_vals[i], s2_a2_vals[i], state_importance) for i
-            in range(len(s2_a2_vals))]
+        traj1_states_importance, traj2_states_importance = [], []
+        for i in range(len(s1_a1_vals)):
+            traj1_states_importance.append(self.get_state_value(s1_a1_vals[i], s1_a2_vals[i]))
+            traj2_states_importance.append(self.get_state_value(s2_a1_vals[i], s2_a2_vals[i]))
         """calculate score of trajectories"""
-        traj1_score = self.importance_funcs[trajectory_importance](traj1_importance_of_states)
-        traj2_score = self.importance_funcs[trajectory_importance](traj2_importance_of_states)
+        traj1_score = self.importance_funcs[importance](traj1_states_importance)
+        traj2_score = self.importance_funcs[importance](traj2_states_importance)
         """return the difference between them. bigger == greater disagreement"""
         return abs(traj1_score - traj2_score)
 
-    def trajectory_importance_last_state(self,):
+    def trajectory_importance_last_state(self, s1, s2, idx):
+        if s1.image.tolist() == s2.image.tolist(): return 0
         """state values"""
         s1_a1_vals = self.a1_s_a_values[-1]
         s1_a2_vals = self.a2_values_for_a1_states[-1]
-        s2_a1_vals = self.a1_values_for_a2_states[-1]
-        s2_a2_vals = self.a2_s_a_values[-1]
+        s2_a1_vals = self.a1_values_for_a2_states[idx]
+        s2_a2_vals = self.a2_s_a_values[idx]
         """the value of the state is defined by the best available action from it"""
         s1_score = max(s1_a1_vals) * self.agent_ratio + max(s1_a2_vals)
         s2_score = max(s2_a1_vals) * self.agent_ratio + max(s2_a2_vals)
@@ -201,16 +202,12 @@ class DisagreementTrajectory(object):
         a2_diff = max(a2_vals) - a2_vals[np.argmax(a1_vals)]
         return a1_diff + a2_diff
 
-    def state_disagreement_score(self, s1_vals, s2_vals, importance):
-        # softmax trick to prevent overflow and underflow
-        new_s1_vals = s1_vals - s1_vals.max()
-        new_s2_vals = s2_vals - s2_vals.max()
-        a1_vals = softmax(new_s1_vals)
-        a2_vals = softmax(new_s2_vals)
-        if importance == 'sb':
-            return self.second_best_confidence(a1_vals, a2_vals)
-        elif importance == 'bety':
-            return self.better_than_you_confidence(a1_vals, a2_vals)
+    def get_state_value(self, a1_vals, a2_vals):
+        """
+        the value of the state is defined by the best available action from it, as this is
+        calculated by estimated future returns
+        """
+        return max(a1_vals) * self.agent_ratio + max(a2_vals)
 
     def normalize_q_values(self, a1_max, a1_min, a2_max, a2_min):
         self.a1_s_a_values = (np.array(self.a1_s_a_values) - a1_min) / (a1_max - a1_min)

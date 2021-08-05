@@ -90,8 +90,7 @@ def main(args):
     log(f'Saved traces', args.verbose)
 
     """rank disagreement trajectories by importance measures"""
-    rank_trajectories(traces, args.importance_type, args.state_importance,
-                      args.trajectory_importance)
+    rank_trajectories(traces, args.importance)
 
     """top k diverse disagreements"""
     disagreements = get_top_k_disagreements(traces, args)
@@ -146,12 +145,8 @@ if __name__ == '__main__':
                         type=int, default=5)
     parser.add_argument('-overlaplim', '--similarity_limit', help='# overlaping',
                         type=int, default=3)
-    parser.add_argument('-impMeth', '--importance_type',
-                        help='importance by state or trajectory', default='trajectory')
-    parser.add_argument('-impTraj', '--trajectory_importance',
-                        help='method calculating trajectory importance', default='last_state')
-    parser.add_argument('-impState', '--state_importance',
-                        help='method calculating state importance', default='bety')
+    parser.add_argument('-imp', '--importance',
+                        help='importance method', default='last_state')
     parser.add_argument('-v', '--verbose', help='print information to the console', default=True)
     parser.add_argument('-ass', '--agent_assessment', help='apply agent ratio by agent score',
                         default=False)
