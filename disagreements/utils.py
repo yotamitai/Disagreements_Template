@@ -9,8 +9,6 @@ import imageio
 from numpy import asarray
 from skimage import img_as_ubyte
 
-from PIL import ImageFont, ImageDraw, Image
-from get_agent import ACTION_DICT
 
 def load_traces(path):
     return pickle_load(join(path, 'Traces.pkl'))
@@ -81,28 +79,3 @@ def make_clean_dirs(path, no_clean=False, file_type='', hard=False):
     except:  # if exists
         if not no_clean: clean_dir(path, file_type, hard)
 
-
-def mark_agent(img, action=None, text=None, position=None, color=255, thickness=2):
-    assert position, 'Error - No position provided for marking agent'
-    img2 = img.copy()
-    top_left = (position[0], position[1])
-    bottom_right = (position[0] + 30, position[1] + 15)
-    cv2.rectangle(img2, top_left, bottom_right, color, thickness)
-
-    """add action text"""
-    if action or text:
-        font = ImageFont.truetype('Roboto-Regular.ttf', 20)
-        text = text or f'Chosen action: {ACTION_DICT[action]}'
-        image = Image.fromarray(img2, 'RGB')
-        draw = ImageDraw.Draw(image)
-        draw.text((40,40), text, (255, 255, 255), font=font)
-        img_array = asarray(image)
-        return img_array
-
-    return img2
-
-def add_border(image_src, border_thickness=5, color=[0, 0, 0]):
-    bt = border_thickness
-    x = cv2.copyMakeBorder(image_src, bt, bt, bt, bt, cv2.BORDER_CONSTANT, value=color)
-    cv2.imshow("Image", x)
-    return x

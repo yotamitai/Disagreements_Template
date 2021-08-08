@@ -1,11 +1,12 @@
 from copy import deepcopy
 
+import cv2
 import imageio
 import numpy as np
 import matplotlib.pyplot as plt
 from os.path import join
-from scipy.special import softmax
-
+from PIL import ImageFont, ImageDraw, Image
+from get_agent import ACTION_DICT
 from disagreements.compare_agents import get_agent_action_from_state
 from disagreements.get_agent import get_agent_q_values_from_state
 from disagreements.logging_info import log
@@ -351,3 +352,23 @@ def make_same_length(trajectories, horizon, traces):
         for _ in range(horizon - len(d.a2_states)):
             d.a2_states.append(d.a2_states[-1])
     return trajectories
+
+
+def mark_agent(img, action=None, text=None, position=None, color=255, thickness=2):
+    assert position, 'Error - No position provided for marking agent'
+    img2 = img.copy()
+    top_left = (position[0], position[1])
+    bottom_right = (position[0] + 30, position[1] + 15)
+    cv2.rectangle(img2, top_left, bottom_right, color, thickness)
+
+    """add action text"""
+    if action or text:
+        font = ImageFont.truetype('Roboto-Regular.ttf', 20)
+        text = text or f'Chosen action: {ACTION_DICT[action]}'
+        image = Image.fromarray(img2, 'RGB')
+        draw = ImageDraw.Draw(image)
+        draw.text((40,40), text, (255, 255, 255), font=font)
+        img_array = np.asarray(image)
+        return img_array
+
+    return img2
