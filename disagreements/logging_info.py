@@ -23,6 +23,7 @@ def get_logging(args):
                         level=logging.INFO)
     log(f'Comparing Agents: {name}', args.verbose)
     log(f'Disagreement importance by: {args.importance}', args.verbose)
+
     return name
 
 
