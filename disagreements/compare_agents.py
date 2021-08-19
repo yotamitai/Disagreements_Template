@@ -71,7 +71,6 @@ def online_comparison(args):
             trace.update(state, curr_obs, a1_a, a1_s_a_values, a2_s_a_values, r, done, {})
 
         """end of episode"""
-        trace.get_trajectories()
         traces.append(deepcopy(trace))
 
     """close environments"""
@@ -84,6 +83,9 @@ def main(args):
     name = get_logging(args)
     traces = load_traces(args.traces_path) if args.traces_path else online_comparison(args)
     log(f'Obtained traces', args.verbose)
+
+    """get trajectories"""
+    [trace.get_trajectories() for trace in traces]
 
     """save traces"""
     save_traces(traces, args.output)
